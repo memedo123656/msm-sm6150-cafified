@@ -115,4 +115,7 @@ obj-$(CONFIG_TOUCHSCREEN_ST)	+= st/
 obj-$(CONFIG_TOUCHSCREEN_FTS)	+= focaltech_touch/
 obj-$(CONFIG_TOUCHSCREEN_GOODIX_GTX9896_I2C) += gt9896/
 obj-$(CONFIG_TOUCHSCREEN_FTS_K6) += k6_focaltech_3658u/
+obj-$(CONFIG_TOUCHSCREEN_FTS_F7B) += ft8719_touch_f7b/
 obj-$(CONFIG_TOUCHSCREEN_TDDI_DBCLK) += double_click.o
+
+

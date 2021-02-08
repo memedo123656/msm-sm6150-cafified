@@ -13,6 +13,9 @@ if INPUT_TOUCHSCREEN
 source "drivers/input/touchscreen/xiaomi/Kconfig"
 source "drivers/input/touchscreen/gt9896/Kconfig"
 source "drivers/input/touchscreen/k6_focaltech_3658u/Kconfig"
+source "drivers/input/touchscreen/ft8719_touch_f7b/Kconfig"
+
+
 
 config TOUCHSCREEN_TDDI_DBCLK
         bool "TDDI IC enable double click"
