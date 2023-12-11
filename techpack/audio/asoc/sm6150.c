@@ -46,6 +46,10 @@
 #include <dt-bindings/sound/audio-codec-port-types.h>
 #include "codecs/bolero/wsa-macro.h"
 #include "codecs/wcd937x/wcd937x.h"
+#include "codecs/fs1815/fsm_public.h"
+#ifdef CONFIG_SND_SOC_TFA9874_FOR_DAVI
+#include "codecs/tfa98xx/inc/tfa_platform_interface_definition.h"
+#endif
 
 #define DRV_NAME "sm6150-asoc-snd"
 
@@ -5097,6 +5101,10 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	//struct snd_soc_component *aux_comp;
 	struct msm_asoc_mach_data *pdata =
 				snd_soc_card_get_drvdata(rtd->card);
+
+#ifdef CONFIG_SND_SOC_FS15XX
+	fsm_add_codec_controls(codec);
+#endif
 
 	ret = snd_soc_add_codec_controls(codec, msm_int_snd_controls,
 				ARRAY_SIZE(msm_int_snd_controls));

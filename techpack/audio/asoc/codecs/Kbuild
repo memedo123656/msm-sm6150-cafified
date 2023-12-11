@@ -210,6 +210,7 @@ ifeq ($(KERNEL_BUILD), 1)
 	obj-y	+= wcd9360/
 	obj-y	+= wcd937x/
 	obj-$(CONFIG_SND_SMARTPA_AW882XX) += awinic/
+	obj-$(CONFIG_SND_SOC_FS15XX) += fs1815/
 endif
 
 ifeq ($(CONFIG_SND_SOC_GCOV), y)
