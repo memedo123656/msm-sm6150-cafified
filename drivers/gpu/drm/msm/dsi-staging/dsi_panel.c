@@ -31,10 +31,9 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #endif
-
-#include "dsi_panel.h"
-#include "dsi_display.h"
 #include "dsi_ctrl_hw.h"
+#include "dsi_display.h"
+#include "dsi_panel.h"
 #include "dsi_parser.h"
 #include "dsi_panel_mi.h"
 
@@ -76,10 +75,12 @@ int panel_disp_param_send_lock(struct dsi_panel *panel, int param);
 int dsi_display_read_panel(struct dsi_panel *panel, struct dsi_read_config *read_config);
 #if DSI_READ_WRITE_PANEL_DEBUG
 static int string_merge_into_buf(const char *str, int len, char *buf);
-static struct dsi_read_config read_reg;
+static struct dsi_read_config g_dsi_read_cfg;
 static struct proc_dir_entry *mipi_proc_entry;
 #define MIPI_PROC_NAME "mipi_reg"
 #endif
+
+extern bool is_first_supply_panel;
 
 enum dsi_dsc_ratio_type {
 	DSC_8BPC_8BPP,
@@ -2122,6 +2123,8 @@ error:
 const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-pre-on-command",
 	"qcom,mdss-dsi-on-command",
+	"qcom,mdss-dsi-on-one-command",
+	"qcom,mdss-dsi-on-three-command",
 	"qcom,mdss-dsi-post-panel-on-command",
 	"qcom,mdss-dsi-pre-off-command",
 	"qcom,mdss-dsi-off-command",
@@ -2216,6 +2219,8 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-pre-on-command-state",
 	"qcom,mdss-dsi-on-command-state",
+	"qcom,mdss-dsi-on-one-command-state",
+	"qcom,mdss-dsi-on-three-command-state",
 	"qcom,mdss-dsi-post-on-command-state",
 	"qcom,mdss-dsi-pre-off-command-state",
 	"qcom,mdss-dsi-off-command-state",
@@ -4313,16 +4318,15 @@ static int dsi_display_write_panel(struct dsi_panel *panel,
 		if (cmds->last_command)
 			cmds->msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
 
-		len = ops->transfer(panel->host, &cmds->msg);
+		len = ops->transfer(panel->host, &cmds->msg);//dsi_host_transfer,
 		if (len < 0) {
 			rc = len;
 			pr_err("failed to set cmds, rc=%d\n", rc);
 			goto error;
 		}
-
 		if (cmds->post_wait_ms)
-			usleep_range(cmds->post_wait_ms * 1000,
-					((cmds->post_wait_ms * 1000) + 10));
+			usleep_range(cmds->post_wait_ms*1000,
+					((cmds->post_wait_ms*1000)+10));
 		cmds++;
 	}
 error:
@@ -4516,10 +4520,6 @@ int dsi_panel_get_lockdowninfo_for_tp(unsigned char *plockdowninfo)
 		for(i = 0; i < 8; i++) {
 			pr_debug("[%s][%d]0x%x", __func__, __LINE__, read_reg.rbuf[i]);
 			plockdowninfo[i] = read_reg.rbuf[i];
-		}
-		if (!strcmp(g_panel->name,"xiaomi 37 02 0b video mode dsc dsi panel")) {
-			plockdowninfo[7] = 0x01;
-			pr_info("plockdowninfo[7] = 0x%x \n", plockdowninfo[7]);
 		}
 		mutex_unlock(&g_panel->panel_lock);
 		return retval;
@@ -6309,13 +6309,26 @@ int dsi_panel_enable(struct dsi_panel *panel)
 		dsi_panel_apply_hbm_mode(panel);
 
 	mutex_lock(&panel->panel_lock);
+	
+	/*mdss-dsi-on-command send*/
+	if (is_first_supply_panel) {
+		rc = dsi_panel_db_ic_enable(panel);
+		if (rc)
+			pr_err("[%s] DB ic failed to send DSI_CMD_SET_ON cmds, rc=%d\n",
+				panel->name, rc);
+	} else {
+		pr_info("%s: send dsi on cmd.\n", __func__);
+		mutex_lock(&panel->panel_lock);
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_ON);
+		if (rc)
+			pr_err("[%s] failed to send DSI_CMD_SET_ON cmds, rc=%d\n",
+			       panel->name, rc);
+		else
+			panel->panel_initialized = true;
+	}
 
-	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_ON);
-	if (rc)
-		pr_err("[%s] failed to send DSI_CMD_SET_ON cmds, rc=%d\n",
-		       panel->name, rc);
-	else
-		panel->panel_initialized = true;
+	if (is_first_supply_panel)
+		mutex_lock(&panel->panel_lock);
 
 	if (count && (panel->cur_mode->timing.refresh_rate == 120)) {
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_BC_120HZ);
@@ -6555,10 +6568,9 @@ int dsi_panel_write_cmd_set(struct dsi_panel *panel,
 			pr_err("failed to set cmds, rc=%d\n", rc);
 			goto error;
 		}
-
 		if (cmds->post_wait_ms)
-			usleep_range(cmds->post_wait_ms * 1000,
-					((cmds->post_wait_ms * 1000) + 10));
+			usleep_range(cmds->post_wait_ms*1000,
+					((cmds->post_wait_ms*1000)+10));
 		cmds++;
 	}
 error:
@@ -6585,12 +6597,12 @@ int dsi_panel_read_cmd_set(struct dsi_panel *panel,
 			return -EINVAL;
 	} else
 		return -EINVAL;
-
+/*
 	if (!panel->panel_initialized) {
 		pr_info("Panel not initialized\n");
 		return -EINVAL;
 	}
-
+*/
 	if (!read_config->enabled) {
 		pr_info("read operation was not permitted\n");
 		return -EPERM;
@@ -6635,7 +6647,7 @@ int dsi_panel_read_cmd_set(struct dsi_panel *panel,
 		goto exit;
 	}
 
-	for (i = 0; i < read_config->cmds_rlen; i++)
+	for (i = 0; i < read_config->cmds_rlen; i++) //debug
 		pr_info("0x%x ", read_config->rbuf[i]);
 	pr_info("\n");
 
@@ -6647,7 +6659,6 @@ exit_ctrl:
 
 	return rc;
 }
-
 ssize_t dsi_panel_mipi_reg_write(struct dsi_panel *panel,
 				char *buf, size_t count)
 {
@@ -6660,15 +6671,17 @@ ssize_t dsi_panel_mipi_reg_write(struct dsi_panel *panel,
 	u32 buf_size = 0;
 	u32 tmp_data = 0;
 
+	pr_debug("%s: Enter\n", __func__);
 	mutex_lock(&panel->panel_lock);
 
-	if (!panel || !panel->panel_initialized) {
+	//if (!panel || !panel->panel_initialized)
+	if (!panel) {
 		pr_err("[LCD] panel not ready!\n");
 		retval = -EAGAIN;
 		goto exit_unlock;
 	}
 
-	pr_debug("input buffer:{%s}\n", buf);
+	pr_info("%s: input buffer:{%s}\n", __func__, buf);
 
 	input_copy = kstrdup(buf, GFP_KERNEL);
 	if (!input_copy) {
@@ -6688,7 +6701,7 @@ ssize_t dsi_panel_mipi_reg_write(struct dsi_panel *panel,
 			pr_err("input buffer conversion failed\n");
 			goto exit_free0;
 		}
-		g_dsi_read_cfg.enabled= !!tmp_data;
+		g_dsi_read_cfg.enabled= !!tmp_data;   /*read register*/
 	}
 
 	/* Removes leading whitespace from input_copy */
@@ -6704,13 +6717,12 @@ ssize_t dsi_panel_mipi_reg_write(struct dsi_panel *panel,
 			pr_err("input buffer conversion failed\n");
 			goto exit_free0;
 		}
-
 		if (tmp_data > sizeof(g_dsi_read_cfg.rbuf)) {
 			pr_err("read size exceeding the limit %d\n",
 					sizeof(g_dsi_read_cfg.rbuf));
 			goto exit_free0;
 		}
-		g_dsi_read_cfg.cmds_rlen = tmp_data;
+		g_dsi_read_cfg.cmds_rlen = tmp_data;  /*read register length*/
 	}
 
 	/* Removes leading whitespace from input_copy */
@@ -6732,7 +6744,6 @@ ssize_t dsi_panel_mipi_reg_write(struct dsi_panel *panel,
 			pr_err("input buffer conversion failed\n");
 			goto exit_free1;
 		}
-
 		pr_debug("[lzl-test]buffer[%d] = 0x%02x\n", buf_size, tmp_data);
 		buffer[buf_size++] = (tmp_data & 0xff);
 		/* Removes leading whitespace from input_copy */
@@ -6779,7 +6790,7 @@ ssize_t dsi_panel_mipi_reg_write(struct dsi_panel *panel,
 		}
 	}
 
-	pr_debug("[%s]: done!\n", panel->name);
+	pr_info("%s:[%s]: done!\n", __func__, panel->name);
 	retval = count;
 
 exit_free3:
@@ -6792,7 +6803,6 @@ exit_free0:
 	kfree(input_dup);
 exit_unlock:
 	mutex_unlock(&panel->panel_lock);
-
 	return retval;
 }
 
@@ -6851,4 +6861,146 @@ int dsi_panel_apply_hbm_mode(struct dsi_panel *panel)
 	mutex_unlock(&panel->panel_lock);
 
 	return rc;
+}
+
+int dsi_panel_db_ic_enable(struct dsi_panel *panel)
+{
+	int rc = 0;
+	u32 tmp = 0;
+	u32 len = 0;
+	/*mdss-dsi-on-two-command read write ctrl*/
+	u8 value_offset = 0x11;
+	char *value_A_ctrl_cmd_buf = "00 00 39 00 00 00 00 00 05 B0 00 0F E0 01";
+	char *value_B_ctrl_cmd_buf = "00 00 39 00 00 00 00 00 05 B0 00 1E E0 01";
+	char *value_read_cmd_buf   = "01 01 06 01 00 00 00 00 01 E0";
+	char *value_0xE0_pre       = "00 00 39 00 00 00 00 00 02 E0";
+	char  value_0xE0_updated[36] = {"0"};
+
+	if (!panel) {
+		pr_err("Invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	/*mdss-dsi-on-one-command send*/
+	pr_info("%s: send dsi on one cmd.\n", __func__);
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_ON_ONE);
+	if (rc) {
+		pr_err("[%s] failed to send DSI_CMD_SET_ON_ONE cmds, rc=%d\n", panel->name, rc);
+	}
+	mutex_unlock(&panel->panel_lock);
+
+	/*================================value_A_ctrl================================*/
+	/*send value_A_ctrl_cmd_buf*/
+	pr_info("%s: send value_A_ctrl_cmd_buf cmd.\n", __func__);
+	rc = dsi_panel_mipi_reg_write(panel, value_A_ctrl_cmd_buf, rc);
+	if (rc) {
+		pr_err("[%s] failed to send value_A_ctrl_cmd_buf cmds, rc=%d\n", panel->name, rc);
+	}
+
+	/*read Value_A(0xE0)*/
+	pr_info("%s: send value_read_cmd_buf cmd.\n", __func__);
+	rc = dsi_panel_mipi_reg_write(panel, value_read_cmd_buf, rc);
+	if (rc) {
+		pr_err("[%s] failed to send read Value_A(0xE0) cmds, rc=%d\n", panel->name, rc);
+	} else {
+		rc = dsi_panel_mipi_reg_show(panel);
+		tmp = g_dsi_read_cfg.rbuf[0] + value_offset;
+		if(tmp > 0x1F) {
+			tmp = 0x1F;
+			pr_info("tmp > 0x1F, so modify to 0x1F  0x%02x\n", tmp);
+		}
+		len = snprintf(value_0xE0_updated, 36, "%s %02x", value_0xE0_pre, tmp);
+		pr_info("value_0xE0_updated == %s\n", value_0xE0_updated);
+	}
+
+	/*send value_A_ctrl_cmd_buf*/
+	pr_info("%s: send value_A_ctrl_cmd_buf cmd for write.\n", __func__);
+	rc = dsi_panel_mipi_reg_write(panel, value_A_ctrl_cmd_buf, rc);
+	if (rc) {
+		pr_err("[%s] failed to send value_A_ctrl_cmd_buf cmds, rc=%d\n", panel->name, rc);
+	}
+	/*write modified Value_A*/
+	pr_info("%s: write modified Value_A.\n", __func__);
+	rc = dsi_panel_mipi_reg_write(panel, value_0xE0_updated, rc);
+	if (rc) {
+		pr_err("[%s] failed write modified Value_A, rc=%d\n", panel->name, rc);
+	}
+
+	/*================================value_B_ctrl================================*/
+	pr_info("%s: send value_B_ctrl_cmd_buf cmd.\n", __func__);
+	rc = dsi_panel_mipi_reg_write(panel, value_B_ctrl_cmd_buf, rc);
+	if (rc) {
+		pr_err("[%s] failed to send value_B_ctrl_cmd_buf cmds, rc=%d\n", panel->name, rc);
+	}
+
+	/*read Value_B(0xE0)*/
+	pr_info("%s: send value_read_cmd_buf B cmd.\n", __func__);
+	rc = dsi_panel_mipi_reg_write(panel, value_read_cmd_buf, rc);
+	if (rc) {
+		pr_err("[%s] failed to send read Value_B(0xE0) cmds, rc=%d\n", panel->name, rc);
+	} else {
+		rc = dsi_panel_mipi_reg_show(panel);
+		/*modify the value of 0xE0*/
+		tmp = g_dsi_read_cfg.rbuf[0] + value_offset;
+		if (tmp > 0x1F) {
+			tmp = 0x1F;
+			pr_info("tmp > 0x1F, so modify to 0x1F  0x%02x\n", tmp);
+		}
+		len = snprintf(value_0xE0_updated, 36, "%s %02x", value_0xE0_pre, tmp);
+		pr_info("value_0xE0_updated == %s\n", value_0xE0_updated);
+	}
+
+	/*send value_B_ctrl_cmd_buf*/
+	pr_info("%s: send value_B_ctrl_cmd_buf cmd for write.\n", __func__);
+	rc = dsi_panel_mipi_reg_write(panel, value_B_ctrl_cmd_buf, rc);
+	if (rc) {
+		pr_err("[%s] failed to send value_B_ctrl_cmd_buf cmds, rc=%d\n", panel->name, rc);
+	}
+	/*write modified Value_B*/
+	pr_info("%s: write modified Value_B.\n", __func__);
+	rc = dsi_panel_mipi_reg_write(panel, value_0xE0_updated, rc);
+	if (rc) {
+		pr_err("[%s] failed write modified Value_B, rc=%d\n", panel->name, rc);
+	}
+	/*===============================end value_B_ctrl================================*/
+
+	mutex_lock(&panel->panel_lock);
+	/*mdss-dsi-on-three-command send*/
+	pr_info("%s: send dsi on three cmd.\n", __func__);
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_ON_THREE);
+	if (rc) {
+		pr_err("[%s] failed to send DSI_CMD_SET_ON_three cmds, rc=%d\n", panel->name, rc);
+	}else{
+		panel->panel_initialized = true;
+		pr_info("%s: panel db ic initialized successfully.\n", __func__);
+	}
+
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_panel_mipi_reg_show(struct dsi_panel *panel)
+{
+	int i = 0;
+
+	mutex_lock(&panel->panel_lock);
+	if (!panel) {
+		mutex_unlock(&panel->panel_lock);
+		return -EAGAIN;
+	}
+
+	if (g_dsi_read_cfg.enabled) {
+		pr_info("%s:\n", __func__);
+		for (i = 0; i < g_dsi_read_cfg.cmds_rlen; i++) {
+			if (i == g_dsi_read_cfg.cmds_rlen - 1) {
+				pr_info("g_dsi_read_cfg.rbuf[%d] == 0x%02x\n", i,g_dsi_read_cfg.rbuf[i]);
+			} else {
+				pr_info("g_dsi_read_cfg.rbuf[%d] == 0x%02x", i,g_dsi_read_cfg.rbuf[i]);
+			}
+		}
+	}
+	mutex_unlock(&panel->panel_lock);
+
+	return 0;
 }
