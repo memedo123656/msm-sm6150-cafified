@@ -180,6 +180,9 @@ struct cp_device {
 	int  die_temp;
 
 	int bus_error_status;
+
+	int  sc8551_charge_mode;
+	int  sc8551_bypass_charge_enable;
 };
 
 #define PM_STATE_LOG_MAX    32

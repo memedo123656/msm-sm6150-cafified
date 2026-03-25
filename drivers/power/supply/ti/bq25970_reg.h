@@ -438,6 +438,9 @@
 #define BQ2597X_REG_13					0x13
 #define BQ2597X_DEV_ID_MASK				0x0F
 #define BQ2597X_DEV_ID_SHIFT				0
+#define BQ25968_DEVICE_ID				0x16
+#define BQ25970_DEVICE_ID				0x10
+#define SC8551_DEVICE_ID				0x00
 
 /* Register 14h */
 #define BQ2597X_REG_14					0x14
@@ -794,7 +797,9 @@
 #define SC8551_VBUS_ADC_LSB				3.75
 #define SC8551_VAC_ADC_LSB				5
 #define SC8551_VOUT_ADC_LSB				1.25
+
 #define SC8551_VBAT_ADC_LSB				(1.25*1.0044)
+
 #define SC8551_VBAT_ADC_LSB_NON_CALIBRATE		1.25
 #define SC8551_IBAT_ADC_LSB				3.125
 #define SC8551_TSBUS_ADC_LSB				1.0
