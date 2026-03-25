@@ -75,7 +75,7 @@ int panel_disp_param_send_lock(struct dsi_panel *panel, int param);
 int dsi_display_read_panel(struct dsi_panel *panel, struct dsi_read_config *read_config);
 #if DSI_READ_WRITE_PANEL_DEBUG
 static int string_merge_into_buf(const char *str, int len, char *buf);
-static struct dsi_read_config g_dsi_read_cfg;
+static struct dsi_read_config read_reg;
 static struct proc_dir_entry *mipi_proc_entry;
 #define MIPI_PROC_NAME "mipi_reg"
 #endif
