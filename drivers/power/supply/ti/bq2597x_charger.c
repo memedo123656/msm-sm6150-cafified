@@ -1510,7 +1510,25 @@ static int bq2597x_parse_dt(struct bq2597x *bq, struct device *dev)
 
 	return 0;
 }
+static int sc8551_get_charge_mode(struct bq2597x *bq)
+{
+	int ret = 0;
+	u8 val = 0;
 
+	if (bq->chip_vendor != SC8551)
+		return SC8551_CHARGE_MODE_DIV2;
+
+	ret = bq2597x_read_byte(bq, SC8551_REG_31, &val);
+
+	return (int)(val & SC8551_CHARGE_MODE_MASK);
+}
+static int sc8551_get_bypass_mode_en(struct bq2597x *bq)
+{
+	if (bq->chip_vendor != SC8551)
+		return 0;
+
+	return bq->bypass_mode_enable;
+}
 static int bq2597x_init_protection(struct bq2597x *bq)
 {
 	int ret;
@@ -1939,15 +1957,6 @@ static int bq2597x_charger_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_TI_BUS_ERROR_STATUS:
 		val->intval = bq2597x_check_vbus_error_status(bq);
-		break;
-	case POWER_SUPPLY_PROP_TI_CHARGE_MODE:
-		val->intval = sc8551_get_charge_mode(bq);
-		break;
-	case POWER_SUPPLY_PROP_TI_BYPASS_MODE_ENABLED:
-		val->intval = sc8551_get_bypass_mode_en(bq);
-		break;
-	case POWER_SUPPLY_PROP_CP_VBAT_CALIBRATE:
-		val->intval = bq->vbat_calibrate;
 		break;
 	default:
 		return -EINVAL;
