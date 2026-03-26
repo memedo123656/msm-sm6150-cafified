@@ -1677,25 +1677,7 @@ static int bq2597x_parse_dt(struct bq2597x *bq, struct device *dev)
 
 	return 0;
 }
-static int sc8551_get_charge_mode(struct bq2597x *bq)
-{
-	int ret = 0;
-	u8 val = 0;
 
-	if (bq->chip_vendor != SC8551)
-		return SC8551_CHARGE_MODE_DIV2;
-
-	ret = bq2597x_read_byte(bq, SC8551_REG_31, &val);
-
-	return (int)(val & SC8551_CHARGE_MODE_MASK);
-}
-static int sc8551_get_bypass_mode_en(struct bq2597x *bq)
-{
-	if (bq->chip_vendor != SC8551)
-		return 0;
-
-	return bq->bypass_mode_enable;
-}
 static int bq2597x_init_protection(struct bq2597x *bq)
 {
 	int ret;
